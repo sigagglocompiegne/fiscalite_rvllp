@@ -15,6 +15,7 @@ Auteur : Florent Vanhoutte
 -- 2022/09/20 : FV / ajout des index spatiaux + id
 -- 2022/09/20 : FV / suppression vue des secteurs avec les VL de certains cat2 (ex : mag1)
 -- 2022/09/20 : FV / adaptation des vues pour coefloc x1 hors des coefloc minoration et majoration et prise en compte dans les calculs
+-- 2022/09/26 : FV / ajustement vue des locaux mixés avec secteur et zones de coef de localisation avec ajout d'un gid pour tenir compte des superpositions multiples et donc d'id local non unique
 
 /*
 ToDo :
@@ -680,6 +681,7 @@ COMMENT ON COLUMN m_fiscalite.geo_v_fisc_refloyer_vl.geom IS 'Géomètrie ponctu
 
 CREATE VIEW m_fiscalite.geo_v_fisc_localact_vl AS 
  SELECT 
+  row_number() OVER () AS gid,
   l.idlocact,
   l.pro_nom,
   l.pro_adress,
@@ -717,6 +719,7 @@ LEFT JOIN m_fiscalite.geo_fisc_coefloc p ON st_intersects(l.geom, p.geom) IS TRU
 
 COMMENT ON VIEW m_fiscalite.geo_v_fisc_localact_vl
   IS 'Simulation de l''impact de la sectorisation et des coefficients de localisation sur la fiscalité des locaux d''activités géolocalisés à la parcelle';
+COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.gid IS 'Identifiant unique de la vue';
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.idlocact IS 'Identifiant du local d''activité';  
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.pro_nom IS 'Nom du propriétaire du local';
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.pro_adress IS 'Adresse du propriétaire du local';
