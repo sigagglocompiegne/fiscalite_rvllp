@@ -16,6 +16,9 @@ Auteur : Florent Vanhoutte
 -- 2022/09/20 : FV / suppression vue des secteurs avec les VL de certains cat2 (ex : mag1)
 -- 2022/09/20 : FV / adaptation des vues pour coefloc x1 hors des coefloc minoration et majoration et prise en compte dans les calculs
 -- 2022/09/26 : FV / ajustement vue des locaux mixés avec secteur et zones de coef de localisation avec ajout d'un gid pour tenir compte des superpositions multiples et donc d'id local non unique
+-- 2022/09/30 : FV / ajout d'une vue des parcelles impactées par une zone de coefficient de localisation
+-- 2022/09/30 : FV / ajout d'un attribut geom1 (buffer négatif) sur la table de coefficient de localisation et l'index spatial
+-- 2022/09/30 : FV / ajout d'un trigger de maj geom1 en cas insert ou update de la table coefficient de localisation
 
 /*
 ToDo :
@@ -34,6 +37,7 @@ ToDo :
 DROP VIEW IF EXISTS m_fiscalite.geo_v_fisc_refloyer_vl;
 DROP VIEW IF EXISTS m_fiscalite.geo_v_fisc_localact_vl;
 DROP VIEW IF EXISTS m_fiscalite.geo_v_fisc_secteur_vl;
+DROP VIEW IF EXISTS m_fiscalite.geo_v_parcelle_coefloc;
 
 
 -- classe
@@ -376,7 +380,8 @@ CREATE TABLE m_fiscalite.geo_fisc_coefloc
   observ character varying(254),
   dbinsert timestamp without time zone NOT NULL DEFAULT now(),  
   dbupdate timestamp without time zone,
-  geom geometry(Polygon,2154), 
+  geom geometry(Polygon,2154),
+  geom1 geometry(Polygon,2154),    
  
   CONSTRAINT geo_fisc_coefloc_pkey PRIMARY KEY (idcoefloc)  
 )
@@ -392,6 +397,7 @@ COMMENT ON COLUMN m_fiscalite.geo_fisc_coefloc.observ IS 'Observations';
 COMMENT ON COLUMN m_fiscalite.geo_fisc_coefloc.dbinsert IS 'Horodatage de l''intégration en base de l''objet';
 COMMENT ON COLUMN m_fiscalite.geo_fisc_coefloc.dbupdate IS 'Horodatage de la mise à jour en base de l''objet';
 COMMENT ON COLUMN m_fiscalite.geo_fisc_coefloc.geom IS 'Géomètrie du coefficient de localisation de la fiscalité des locaux d''activité';
+COMMENT ON COLUMN m_fiscalite.geo_fisc_coefloc.geom IS 'Géomètrie réduite pour jointure spatiale avec la table des parcelles du cadastre';
 
 ALTER TABLE m_fiscalite.geo_fisc_coefloc ALTER COLUMN idcoefloc SET DEFAULT nextval('m_fiscalite.idcoefloc_seq'::regclass);
 
@@ -498,6 +504,13 @@ CREATE INDEX geo_fisc_refloyer_idrefloyer_idx
 
 CREATE INDEX geo_fisc_coefloc_geom_idx
     ON m_fiscalite.geo_fisc_coefloc USING gist (geom);
+    
+-- Index: geo_fisc_coefloc_geom1_idx
+
+-- DROP INDEX m_fiscalite.geo_fisc_coefloc_geom1_idx;
+
+CREATE INDEX geo_fisc_coefloc_geom1_idx
+    ON m_fiscalite.geo_fisc_coefloc USING gist (geom1);
 
 -- Index: geo_fisc_coefloc_idcoefloc_idx
 
@@ -751,6 +764,96 @@ COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.source IS 'Source de l''inf
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.geom IS 'Géomètrie surfacique de la parcelle du local d''activité';
 
 
+-- #################################################################### VUE PARCELLE COEF LOC ###############################################
+        
+-- View: m_fiscalite.geo_v_fisc_parcelle_coefloc
+
+-- DROP VIEW m_fiscalite.geo_v_fisc_parcelle_coefloc;
+
+CREATE VIEW m_fiscalite.geo_v_fisc_parcelle_coefloc AS 
+ SELECT 
+  row_number() OVER () AS gid,
+  p.geo_parcelle as refcad,
+  p.insee,
+  p.commune,
+  right(p.geo_section,2) as section,
+  right(p.geo_parcelle,4) as parcelle,
+  c.valcoef,
+  c.observ,
+  p.geom
+  
+FROM m_fiscalite.geo_fisc_coefloc c
+LEFT JOIN r_cadastre.geo_parcelle p ON st_intersects(c.geom1, p.geom) IS TRUE WHERE p.lot = 'arc';
+
+
+COMMENT ON VIEW m_fiscalite.geo_v_fisc_parcelle_coefloc
+  IS 'Parcelles concernées par les zones de coefficient de localisation de la RVLLP';
+COMMENT ON COLUMN m_fiscalite.geo_v_fisc_parcelle_coefloc.gid IS 'Identifiant unique de la vue';
+COMMENT ON COLUMN m_fiscalite.geo_v_fisc_parcelle_coefloc.refcad IS 'Référence cadastrale';
+COMMENT ON COLUMN m_fiscalite.geo_v_fisc_parcelle_coefloc.insee IS 'Code INSEE';
+COMMENT ON COLUMN m_fiscalite.geo_v_fisc_parcelle_coefloc.commune IS 'Nom de la commune';
+COMMENT ON COLUMN m_fiscalite.geo_v_fisc_parcelle_coefloc.section IS 'Section';
+COMMENT ON COLUMN m_fiscalite.geo_v_fisc_parcelle_coefloc.parcelle IS 'Parcelle';
+COMMENT ON COLUMN m_fiscalite.geo_v_fisc_parcelle_coefloc.valcoef IS 'Valeur du coefficient de localisation (Collectivité)';
+COMMENT ON COLUMN m_fiscalite.geo_v_fisc_parcelle_coefloc.observ IS 'Observations';
+COMMENT ON COLUMN m_fiscalite.geo_v_fisc_parcelle_coefloc.geom IS 'Géomètrie surfacique de la parcelle affectée par un coefficient de localisation';
+
+
+-- ####################################################################################################################################################
+-- ###                                                                                                                                              ###
+-- ###                                                                      TRIGGER                                                                 ###
+-- ###                                                                                                                                              ###
+-- ####################################################################################################################################################
+
+
+
+-- #################################################################### FONCTION TRIGGER - GEO_FISC_COEFLOC #############################################
+
+-- Function: m_fiscalite.ft_geo_fisc_coefloc()
+
+-- DROP FUNCTION m_fiscalite.ft_geo_fisc_coefloc();
+
+CREATE OR REPLACE FUNCTION m_fiscalite.ft_geo_fisc_coefloc()
+  RETURNS trigger AS
+$BODY$
+
+BEGIN
+
+-- INSERT
+IF (TG_OP = 'INSERT') THEN
+
+NEW.geom1 = st_buffer (NEW.geom,-1);
+
+RETURN NEW;
+
+-- UPDATE
+ELSIF (TG_OP = 'UPDATE') THEN
+
+NEW.geom1 = st_buffer (NEW.geom,-1);
+ 
+RETURN NEW;
+
+END IF;
+
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+
+COMMENT ON FUNCTION m_fiscalite.ft_geo_fisc_coefloc() IS 'Fonction trigger pour insert ou update du buffer négatif des polygones de coefficient de localisation';
+
+
+-- Trigger: t_geo_fisc_coefloc ON m_fiscalite.geo_fisc_coefloc
+
+-- DROP TRIGGER t_geo_fisc_coefloc ON m_fiscalite.geo_fisc_coefloc;
+
+CREATE TRIGGER t_geo_fisc_coefloc
+  BEFORE INSERT OR UPDATE
+  ON m_fiscalite.geo_fisc_coefloc
+  FOR EACH ROW
+  EXECUTE PROCEDURE m_fiscalite.ft_geo_fisc_coefloc();
+
+
 -- ####################################################################################################################################################
 -- ###                                                                                                                                              ###
 -- ###                                                                        DROITS                                                                ###
@@ -820,3 +923,10 @@ GRANT ALL ON TABLE m_fiscalite.geo_v_fisc_localact_vl TO sig_create;
 GRANT SELECT ON TABLE m_fiscalite.geo_v_fisc_localact_vl TO sig_read;
 GRANT ALL ON TABLE m_fiscalite.geo_v_fisc_localact_vl TO create_sig;
 GRANT INSERT, SELECT, UPDATE, DELETE ON TABLE m_fiscalite.geo_v_fisc_localact_vl TO sig_edit;
+
+ALTER VIEW m_fiscalite.geo_v_fisc_parcelle_coefloc
+  OWNER TO sig_create;
+GRANT ALL ON TABLE m_fiscalite.geo_v_fisc_parcelle_coefloc TO sig_create;
+GRANT SELECT ON TABLE m_fiscalite.geo_v_fisc_parcelle_coefloc TO sig_read;
+GRANT ALL ON TABLE m_fiscalite.geo_v_fisc_parcelle_coefloc TO create_sig;
+GRANT INSERT, SELECT, UPDATE, DELETE ON TABLE m_fiscalite.geo_v_fisc_parcelle_coefloc TO sig_edit;
