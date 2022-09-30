@@ -19,6 +19,8 @@ Auteur : Florent Vanhoutte
 -- 2022/09/30 : FV / ajout d'une vue des parcelles impactées par une zone de coefficient de localisation
 -- 2022/09/30 : FV / ajout d'un attribut geom1 (buffer négatif) sur la table de coefficient de localisation et l'index spatial
 -- 2022/09/30 : FV / ajout d'un trigger de maj geom1 en cas insert ou update de la table coefficient de localisation
+-- 2022/09/30 : FV / correction calcul de la valeur locative pondérée (collectivité finale)
+
 
 /*
 ToDo :
@@ -716,7 +718,7 @@ CREATE VIEW m_fiscalite.geo_v_fisc_localact_vl AS
   s.vl22c,
   s.vl22cf,
   CASE WHEN p.valcoef IS NULL THEN 1::numeric ELSE p.valcoef END AS valcoef,
-  round((s.vl22c * (CASE WHEN p.valcoef IS NULL THEN 1::numeric ELSE p.valcoef END)),2) AS vl22cp,
+  round((s.vl22cf * (CASE WHEN p.valcoef IS NULL THEN 1::numeric ELSE p.valcoef END)),2) AS vl22cfp,
   s.evl22e21e,
   s.evl22c21e,
   s.evl22cf21e,  
@@ -754,7 +756,7 @@ COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.vl22e IS 'Valeur locative 2
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.vl22c IS 'Valeur locative 2022 (Collectivité - initial)';
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.vl22cf IS 'Valeur locative 2022 (Collectivité - final)';
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.valcoef IS 'Valeur du coefficient de localisation (Collectivité)';
-COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.vl22cp IS 'Valeur locative 2022 pondérée (Collectivité - final)';
+COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.vl22cfp IS 'Valeur locative 2022 pondérée (Collectivité - final)';
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.evl22e21e IS 'Evolution de la valeur locative 2021-2022 (Etat)';
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.evl22c21e IS 'Evolution de la valeur locative 2021-2022 (Collectivité - initial)';
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.evl22cf21e IS 'Evolution de la valeur locative 2021-2022 (Collectivité - final)';
