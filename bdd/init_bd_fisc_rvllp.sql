@@ -20,6 +20,10 @@ Auteur : Florent Vanhoutte
 -- 2022/09/30 : FV / ajout d'un attribut geom1 (buffer négatif) sur la table de coefficient de localisation et l'index spatial
 -- 2022/09/30 : FV / ajout d'un trigger de maj geom1 en cas insert ou update de la table coefficient de localisation
 -- 2022/09/30 : FV / correction calcul de la valeur locative pondérée (collectivité finale)
+-- 2022/10/06 : FV / correction commentaires erronés des tables an_fisc_vl21 et an_fisc_vl22
+-- 2022/10/06 : FV / ajout classe sur la nouvelle grille de VL (an_fisc_vl23) et éléments liés (index, sequence, droits)
+-- 2022/10/07 : FV / ajout d'un attribut geom1 (buffer négatif) sur la table des locaux d'activités fiscalisés (geo_fisc_locact), index spatial et trigger pour éviter les problèmes de bordures lors des jointures spatiales avec les secteurs
+-- 2022/10/07 : FV / correction des vues pour la jointure local-secteur avec utilisation de la geom1 des locaux + conditions pour s'assurer d'être dans la meme commune (insee)
 
 
 /*
@@ -49,6 +53,7 @@ DROP TABLE IF EXISTS m_fiscalite.geo_fisc_coefloc;
 DROP TABLE IF EXISTS m_fiscalite.geo_fisc_secteur;
 DROP TABLE IF EXISTS m_fiscalite.an_fisc_vl21;
 DROP TABLE IF EXISTS m_fiscalite.an_fisc_vl22;
+DROP TABLE IF EXISTS m_fiscalite.an_fisc_vl23;
 
 -- sequence
 DROP SEQUENCE IF EXISTS m_fiscalite.idcoefloc_seq;
@@ -56,6 +61,7 @@ DROP SEQUENCE IF EXISTS m_fiscalite.idrefloyer_seq;
 DROP SEQUENCE IF EXISTS m_fiscalite.idsecteur_seq;
 DROP SEQUENCE IF EXISTS m_fiscalite.idvl21_seq;
 DROP SEQUENCE IF EXISTS m_fiscalite.idvl22_seq;
+DROP SEQUENCE IF EXISTS m_fiscalite.idvl23_seq;
 
 -- #################################################################### SCHEMA  ####################################################################
 
@@ -134,7 +140,18 @@ CREATE SEQUENCE m_fiscalite.idvl22_seq
   MINVALUE 0
   MAXVALUE 9223372036854775807
   START 1
-  CACHE 1;    
+  CACHE 1;
+  
+-- Sequence: m_fiscalite.idvl23_seq
+
+-- DROP SEQUENCE m_fiscalite.idvl23_seq;
+
+CREATE SEQUENCE m_fiscalite.idvl23_seq
+  INCREMENT 1
+  MINVALUE 0
+  MAXVALUE 9223372036854775807
+  START 1
+  CACHE 1;        
 
 
 -- ####################################################################################################################################################
@@ -165,7 +182,7 @@ WITH (
 );
 
 COMMENT ON TABLE m_fiscalite.an_fisc_vl21
-  IS 'Loyer de locaux d''activités géolocalisés';
+  IS 'Grille tarifaire des valeurs locatives 2021';
 COMMENT ON COLUMN m_fiscalite.an_fisc_vl21.idvl21 IS 'Identifiant';
 COMMENT ON COLUMN m_fiscalite.an_fisc_vl21.cat1 IS 'Catégorie niveau 1 du local d''activité';  
 COMMENT ON COLUMN m_fiscalite.an_fisc_vl21.cat2 IS 'Catégorie niveau 2 du local d''activité';
@@ -196,7 +213,7 @@ WITH (
 );
 
 COMMENT ON TABLE m_fiscalite.an_fisc_vl22
-  IS 'Loyer de locaux d''activités géolocalisés';
+  IS 'Grille tarifaire des valeurs locatives 2022 (grille été 2022)';
 COMMENT ON COLUMN m_fiscalite.an_fisc_vl22.idvl22 IS 'Identifiant';
 COMMENT ON COLUMN m_fiscalite.an_fisc_vl22.cat1 IS 'Catégorie niveau 1 du local d''activité';  
 COMMENT ON COLUMN m_fiscalite.an_fisc_vl22.cat2 IS 'Catégorie niveau 2 du local d''activité';
@@ -204,6 +221,37 @@ COMMENT ON COLUMN m_fiscalite.an_fisc_vl22.s22e IS 'Niveau de secteur 22 Etat';
 COMMENT ON COLUMN m_fiscalite.an_fisc_vl22.vl22e IS 'Valeur locative 22 Etat € TTC / m2 / an';
 
 ALTER TABLE m_fiscalite.an_fisc_vl22 ALTER COLUMN idvl22 SET DEFAULT nextval('m_fiscalite.idvl22_seq'::regclass);
+
+
+-- ################################################################ CLASSE VL23 CAT2 ##############################################
+
+-- Table: m_fiscalite.an_fisc_vl23
+
+-- DROP TABLE m_fiscalite.an_fisc_vl23;
+
+CREATE TABLE m_fiscalite.an_fisc_vl23
+(
+  idvl23 bigint NOT NULL,
+  cat1 character varying(3),
+  cat2 character varying(4),
+  s23e character varying(1),
+  vl23e numeric (6,2), 
+ 
+  CONSTRAINT an_fisc_vl23_pkey PRIMARY KEY (idvl23)  
+)
+WITH (
+  OIDS=FALSE
+);
+
+COMMENT ON TABLE m_fiscalite.an_fisc_vl23
+  IS 'Grille tarifaire des valeurs locatives 2023 (grille octobre 2022)';
+COMMENT ON COLUMN m_fiscalite.an_fisc_vl23.idvl23 IS 'Identifiant';
+COMMENT ON COLUMN m_fiscalite.an_fisc_vl23.cat1 IS 'Catégorie niveau 1 du local d''activité';  
+COMMENT ON COLUMN m_fiscalite.an_fisc_vl23.cat2 IS 'Catégorie niveau 2 du local d''activité';
+COMMENT ON COLUMN m_fiscalite.an_fisc_vl23.s23e IS 'Niveau de secteur 23 Etat';
+COMMENT ON COLUMN m_fiscalite.an_fisc_vl23.vl23e IS 'Valeur locative 23 Etat € TTC / m2 / an';
+
+ALTER TABLE m_fiscalite.an_fisc_vl23 ALTER COLUMN idvl23 SET DEFAULT nextval('m_fiscalite.idvl23_seq'::regclass);
 
 
 
@@ -283,7 +331,8 @@ CREATE TABLE m_fiscalite.geo_fisc_localact
   source character varying(100),
   dbinsert timestamp without time zone NOT NULL DEFAULT now(),  
   dbupdate timestamp without time zone,
-  geom geometry(MultiPolygon,2154), 
+  geom geometry(MultiPolygon,2154),
+  geom1 geometry(MultiPolygon,2154),    
  
   CONSTRAINT geo_fisc_localact_pkey PRIMARY KEY (idlocact)  
 )
@@ -309,6 +358,7 @@ COMMENT ON COLUMN m_fiscalite.geo_fisc_localact.source IS 'Source de l''informat
 COMMENT ON COLUMN m_fiscalite.geo_fisc_localact.dbinsert IS 'Horodatage de l''intégration en base de l''objet';
 COMMENT ON COLUMN m_fiscalite.geo_fisc_localact.dbupdate IS 'Horodatage de la mise à jour en base de l''objet';
 COMMENT ON COLUMN m_fiscalite.geo_fisc_localact.geom IS 'Géomètrie surfacique de la parcelle du local d''activité';
+COMMENT ON COLUMN m_fiscalite.geo_fisc_localact.geom1 IS 'Géomètrie réduite pour jointure spatiale avec la table des secteurs de fiscalité';
 
 ALTER TABLE m_fiscalite.geo_fisc_localact ALTER COLUMN idlocact SET DEFAULT nextval('m_fiscalite.idlocact_seq'::regclass);
 
@@ -443,7 +493,24 @@ CREATE INDEX an_fisc_vl22_idvl22_idx
 
 CREATE INDEX an_fisc_vl22_cat2_idx
     ON m_fiscalite.an_fisc_vl22 USING btree (cat2);
+
+
+-- ################################################################ CLASSE VL23 CAT2 ##############################################
     
+-- Index: an_fisc_vl23_idvl23_idx
+
+-- DROP INDEX m_fiscalite.an_fisc_vl23_idcoefloc_idx;
+
+CREATE INDEX an_fisc_vl23_idvl23_idx
+    ON m_fiscalite.an_fisc_vl23 USING btree (idvl23);
+    
+-- Index: an_fisc_vl23_cat2_idx
+
+-- DROP INDEX m_fiscalite.an_fisc_vl23_cat2_idx;
+
+CREATE INDEX an_fisc_vl23_cat2_idx
+    ON m_fiscalite.an_fisc_vl23 USING btree (cat2);
+
 
 
 -- ################################################################ CLASSE SECTEUR ##############################################
@@ -461,6 +528,13 @@ CREATE INDEX geo_fisc_secteur_geom_idx
 
 CREATE INDEX geo_fisc_secteur_idsecteur_idx
     ON m_fiscalite.geo_fisc_secteur USING btree (idsecteur);
+    
+-- Index: geo_fisc_secteur_insee_idx
+
+-- DROP INDEX m_fiscalite.geo_fisc_secteur_insee_idx;
+
+CREATE INDEX geo_fisc_secteur_insee_idx
+    ON m_fiscalite.geo_fisc_secteur USING btree (insee);    
 
 
 -- ################################################################ CLASSE DE LOCAL D'ACTIVITE ##############################################
@@ -471,6 +545,15 @@ CREATE INDEX geo_fisc_secteur_idsecteur_idx
 
 CREATE INDEX geo_fisc_localact_geom_idx
     ON m_fiscalite.geo_fisc_localact USING gist (geom);
+    
+
+-- Index: geo_fisc_localact_geom1_idx
+
+-- DROP INDEX m_fiscalite.geo_fisc_localact_geom1_idx;
+
+CREATE INDEX geo_fisc_localact_geom1_idx
+    ON m_fiscalite.geo_fisc_localact USING gist (geom1);    
+    
 
 -- Index: geo_fisc_localact_idlocact_idx
 
@@ -478,6 +561,14 @@ CREATE INDEX geo_fisc_localact_geom_idx
 
 CREATE INDEX geo_fisc_localact_idlocact_idx
     ON m_fiscalite.geo_fisc_localact USING btree (idlocact);
+    
+
+-- Index: geo_fisc_localact_insee_idx
+
+-- DROP INDEX m_fiscalite.geo_fisc_localact_insee_idx;
+
+CREATE INDEX geo_fisc_localact_insee_idx
+    ON m_fiscalite.geo_fisc_localact USING btree (insee);     
 
 
 
@@ -489,6 +580,7 @@ CREATE INDEX geo_fisc_localact_idlocact_idx
 
 CREATE INDEX geo_fisc_refloyer_geom_idx
     ON m_fiscalite.geo_fisc_refloyer USING gist (geom);
+    
 
 -- Index: geo_fisc_refloyer_idrefloyer_idx
 
@@ -728,8 +820,8 @@ CREATE VIEW m_fiscalite.geo_v_fisc_localact_vl AS
   l.geom
   
 FROM m_fiscalite.geo_fisc_localact l
-LEFT JOIN m_fiscalite.geo_v_fisc_secteur_vl s ON s.cat2 = l.cat2 AND st_intersects(l.geom, s.geom) IS TRUE
-LEFT JOIN m_fiscalite.geo_fisc_coefloc p ON st_intersects(l.geom, p.geom) IS TRUE;
+LEFT JOIN m_fiscalite.geo_v_fisc_secteur_vl s ON s.cat2 = l.cat2 AND st_intersects(l.geom1, s.geom) IS TRUE AND l.insee = s.insee
+LEFT JOIN m_fiscalite.geo_fisc_coefloc p ON st_intersects(l.geom, p.geom1) IS TRUE ;
 
 
 COMMENT ON VIEW m_fiscalite.geo_v_fisc_localact_vl
@@ -808,6 +900,52 @@ COMMENT ON COLUMN m_fiscalite.geo_v_fisc_parcelle_coefloc.geom IS 'Géomètrie s
 -- ####################################################################################################################################################
 
 
+-- #################################################################### FONCTION TRIGGER - GEO_FISC_LOCALACT #############################################
+
+-- Function: m_fiscalite.ft_geo_fisc_localact()
+
+-- DROP FUNCTION m_fiscalite.ft_geo_fisc_localact();
+
+CREATE OR REPLACE FUNCTION m_fiscalite.ft_geo_fisc_localact()
+  RETURNS trigger AS
+$BODY$
+
+BEGIN
+
+-- INSERT
+IF (TG_OP = 'INSERT') THEN
+
+NEW.geom1 = st_multi(st_buffer (NEW.geom,-1));
+
+RETURN NEW;
+
+-- UPDATE
+ELSIF (TG_OP = 'UPDATE') THEN
+
+NEW.geom1 = st_multi(st_buffer (NEW.geom,-1));
+ 
+RETURN NEW;
+
+END IF;
+
+END;
+$BODY$
+  LANGUAGE plpgsql VOLATILE
+  COST 100;
+
+COMMENT ON FUNCTION m_fiscalite.ft_geo_fisc_localact() IS 'Fonction trigger pour insert ou update du buffer négatif des polygones des locaux d''activités';
+
+
+-- Trigger: t_geo_fisc_localact ON m_fiscalite.geo_fisc_localact
+
+-- DROP TRIGGER t_geo_fisc_localact ON m_fiscalite.geo_fisc_localact;
+
+CREATE TRIGGER t_geo_fisc_localact
+  BEFORE INSERT OR UPDATE
+  ON m_fiscalite.geo_fisc_localact
+  FOR EACH ROW
+  EXECUTE PROCEDURE m_fiscalite.ft_geo_fisc_localact();
+
 
 -- #################################################################### FONCTION TRIGGER - GEO_FISC_COEFLOC #############################################
 
@@ -824,14 +962,14 @@ BEGIN
 -- INSERT
 IF (TG_OP = 'INSERT') THEN
 
-NEW.geom1 = st_buffer (NEW.geom,-1);
+NEW.geom1 = st_multi(st_buffer (NEW.geom,-1));
 
 RETURN NEW;
 
 -- UPDATE
 ELSIF (TG_OP = 'UPDATE') THEN
 
-NEW.geom1 = st_buffer (NEW.geom,-1);
+NEW.geom1 = st_multi(st_buffer (NEW.geom,-1));
  
 RETURN NEW;
 
@@ -904,6 +1042,13 @@ GRANT ALL ON TABLE m_fiscalite.an_fisc_vl22 TO sig_create;
 GRANT SELECT ON TABLE m_fiscalite.an_fisc_vl22 TO sig_read;
 GRANT ALL ON TABLE m_fiscalite.an_fisc_vl22 TO create_sig;
 GRANT INSERT, SELECT, UPDATE, DELETE ON TABLE m_fiscalite.an_fisc_vl22 TO sig_edit;
+
+ALTER TABLE m_fiscalite.an_fisc_vl23
+  OWNER TO sig_create;
+GRANT ALL ON TABLE m_fiscalite.an_fisc_vl23 TO sig_create;
+GRANT SELECT ON TABLE m_fiscalite.an_fisc_vl23 TO sig_read;
+GRANT ALL ON TABLE m_fiscalite.an_fisc_vl23 TO create_sig;
+GRANT INSERT, SELECT, UPDATE, DELETE ON TABLE m_fiscalite.an_fisc_vl23 TO sig_edit;
 
 ALTER VIEW m_fiscalite.geo_v_fisc_secteur_vl
   OWNER TO sig_create;
