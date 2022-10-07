@@ -24,11 +24,13 @@ Auteur : Florent Vanhoutte
 -- 2022/10/06 : FV / ajout classe sur la nouvelle grille de VL (an_fisc_vl23) et éléments liés (index, sequence, droits)
 -- 2022/10/07 : FV / ajout d'un attribut geom1 (buffer négatif) sur la table des locaux d'activités fiscalisés (geo_fisc_locact), index spatial et trigger pour éviter les problèmes de bordures lors des jointures spatiales avec les secteurs
 -- 2022/10/07 : FV / correction des vues pour la jointure local-secteur avec utilisation de la geom1 des locaux + conditions pour s'assurer d'être dans la meme commune (insee)
+-- 2022/10/07 : FV / ajout calculs des bases locatives en fonction des différentes simulation de VL (sup_pond * VLxxx)
 
 
 /*
 ToDo :
 - optimisation index
+- définir si le changement de grille tarifaire vl22 et vl23 nécessite la création de nouvelles vues, le remplacement de la src actuelle des vues ou la restructuration des vues pour disposer des 2 infos
 */
 
 
@@ -811,6 +813,10 @@ CREATE VIEW m_fiscalite.geo_v_fisc_localact_vl AS
   s.vl22cf,
   CASE WHEN p.valcoef IS NULL THEN 1::numeric ELSE p.valcoef END AS valcoef,
   round((s.vl22cf * (CASE WHEN p.valcoef IS NULL THEN 1::numeric ELSE p.valcoef END)),2) AS vl22cfp,
+  l.sup_pond * s.vl21e as base21e,
+  l.sup_pond * s.vl22e as base22e,
+  l.sup_pond * s.vl22cf as base22cf,
+  l.sup_pond * (round((s.vl22cf * (CASE WHEN p.valcoef IS NULL THEN 1::numeric ELSE p.valcoef END)),2)) as base22cfp,
   s.evl22e21e,
   s.evl22c21e,
   s.evl22cf21e,  
@@ -849,6 +855,10 @@ COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.vl22c IS 'Valeur locative 2
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.vl22cf IS 'Valeur locative 2022 (Collectivité - final)';
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.valcoef IS 'Valeur du coefficient de localisation (Collectivité)';
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.vl22cfp IS 'Valeur locative 2022 pondérée (Collectivité - final)';
+COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.base21e IS 'Base locative 2021 de l''Etat';
+COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.base22e IS 'Base locative 2022 (Etat)';
+COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.base22cf IS 'Base locative 2022 (Collectivité - final)';
+COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.base22cfp IS 'Base locative 2022 pondérée (Collectivité - final)';
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.evl22e21e IS 'Evolution de la valeur locative 2021-2022 (Etat)';
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.evl22c21e IS 'Evolution de la valeur locative 2021-2022 (Collectivité - initial)';
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.evl22cf21e IS 'Evolution de la valeur locative 2021-2022 (Collectivité - final)';
