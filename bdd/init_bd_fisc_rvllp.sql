@@ -25,6 +25,9 @@ Auteur : Florent Vanhoutte
 -- 2022/10/07 : FV / ajout d'un attribut geom1 (buffer négatif) sur la table des locaux d'activités fiscalisés (geo_fisc_locact), index spatial et trigger pour éviter les problèmes de bordures lors des jointures spatiales avec les secteurs
 -- 2022/10/07 : FV / correction des vues pour la jointure local-secteur avec utilisation de la geom1 des locaux + conditions pour s'assurer d'être dans la meme commune (insee)
 -- 2022/10/07 : FV / ajout calculs des bases locatives en fonction des différentes simulation de VL (sup_pond * VLxxx)
+-- 2022/10/10 : FV / ajout d'un attribut geom1 (buffer négatif) sur la table des secteurs + index spatial + trigger
+-- 2022/10/10 : FV / revision des jointures spatiales pour la vue des locaux d'actvités avec utilisation de la geom1 pour les secteurs et la geom pour les locaux
+-- 2022/10/10 : FV / suppression atttibut geom1 et dépendances (index, trigger) pour les locaux d'activités
 
 
 /*
@@ -305,7 +308,7 @@ COMMENT ON COLUMN m_fiscalite.geo_fisc_refloyer.observ IS 'Observations';
 COMMENT ON COLUMN m_fiscalite.geo_fisc_refloyer.source IS 'Source de l''information';
 COMMENT ON COLUMN m_fiscalite.geo_fisc_refloyer.dbinsert IS 'Horodatage de l''intégration en base de l''objet';
 COMMENT ON COLUMN m_fiscalite.geo_fisc_refloyer.dbupdate IS 'Horodatage de la mise à jour en base de l''objet';
-COMMENT ON COLUMN m_fiscalite.geo_fisc_refloyer.geom IS 'Géomètrie ponctuelle de l''adresse du local d''activité';
+COMMENT ON COLUMN m_fiscalite.geo_fisc_refloyer.geom IS 'Géométrie ponctuelle de l''adresse du local d''activité';
 
 ALTER TABLE m_fiscalite.geo_fisc_refloyer ALTER COLUMN idrefloyer SET DEFAULT nextval('m_fiscalite.idrefloyer_seq'::regclass);
 
@@ -359,8 +362,8 @@ COMMENT ON COLUMN m_fiscalite.geo_fisc_localact.observ IS 'Observations';
 COMMENT ON COLUMN m_fiscalite.geo_fisc_localact.source IS 'Source de l''information';
 COMMENT ON COLUMN m_fiscalite.geo_fisc_localact.dbinsert IS 'Horodatage de l''intégration en base de l''objet';
 COMMENT ON COLUMN m_fiscalite.geo_fisc_localact.dbupdate IS 'Horodatage de la mise à jour en base de l''objet';
-COMMENT ON COLUMN m_fiscalite.geo_fisc_localact.geom IS 'Géomètrie surfacique de la parcelle du local d''activité';
-COMMENT ON COLUMN m_fiscalite.geo_fisc_localact.geom1 IS 'Géomètrie réduite pour jointure spatiale avec la table des secteurs de fiscalité';
+COMMENT ON COLUMN m_fiscalite.geo_fisc_localact.geom IS 'Géométrie surfacique de la parcelle du local d''activité';
+COMMENT ON COLUMN m_fiscalite.geo_fisc_localact.geom1 IS 'Géométrie réduite pour jointure spatiale avec la table des secteurs de fiscalité';
 
 ALTER TABLE m_fiscalite.geo_fisc_localact ALTER COLUMN idlocact SET DEFAULT nextval('m_fiscalite.idlocact_seq'::regclass);
 
@@ -391,7 +394,8 @@ CREATE TABLE m_fiscalite.geo_fisc_secteur
   dbinsert timestamp without time zone NOT NULL DEFAULT now(),  
   dbupdate timestamp without time zone,
   geom geometry(Polygon,2154), 
- 
+  geom1 geometry(Polygon,2154),
+   
   CONSTRAINT geo_fisc_secteur_pkey PRIMARY KEY (idsecteur)  
 )
 WITH (
@@ -416,7 +420,8 @@ COMMENT ON COLUMN m_fiscalite.geo_fisc_secteur.s22cf IS 'Niveau de secteur 2022 
 COMMENT ON COLUMN m_fiscalite.geo_fisc_secteur.observ IS 'Observations';
 COMMENT ON COLUMN m_fiscalite.geo_fisc_secteur.dbinsert IS 'Horodatage de l''intégration en base de l''objet';
 COMMENT ON COLUMN m_fiscalite.geo_fisc_secteur.dbupdate IS 'Horodatage de la mise à jour en base de l''objet';
-COMMENT ON COLUMN m_fiscalite.geo_fisc_secteur.geom IS 'Géomètrie du secteur de fiscalité des locaux d''activité';
+COMMENT ON COLUMN m_fiscalite.geo_fisc_secteur.geom IS 'Géométrie du secteur de fiscalité des locaux d''activité';
+COMMENT ON COLUMN m_fiscalite.geo_fisc_secteur.geom1 IS 'Géométrie réduite pour jointure spatiale avec d''autres classes geo';
 
 ALTER TABLE m_fiscalite.geo_fisc_secteur ALTER COLUMN idsecteur SET DEFAULT nextval('m_fiscalite.idsecteur_seq'::regclass);
 
@@ -450,8 +455,8 @@ COMMENT ON COLUMN m_fiscalite.geo_fisc_coefloc.valcoef IS 'Valeur du coefficient
 COMMENT ON COLUMN m_fiscalite.geo_fisc_coefloc.observ IS 'Observations';
 COMMENT ON COLUMN m_fiscalite.geo_fisc_coefloc.dbinsert IS 'Horodatage de l''intégration en base de l''objet';
 COMMENT ON COLUMN m_fiscalite.geo_fisc_coefloc.dbupdate IS 'Horodatage de la mise à jour en base de l''objet';
-COMMENT ON COLUMN m_fiscalite.geo_fisc_coefloc.geom IS 'Géomètrie du coefficient de localisation de la fiscalité des locaux d''activité';
-COMMENT ON COLUMN m_fiscalite.geo_fisc_coefloc.geom IS 'Géomètrie réduite pour jointure spatiale avec la table des parcelles du cadastre';
+COMMENT ON COLUMN m_fiscalite.geo_fisc_coefloc.geom IS 'Géométrie du coefficient de localisation de la fiscalité des locaux d''activité';
+COMMENT ON COLUMN m_fiscalite.geo_fisc_coefloc.geom IS 'Géométrie réduite pour jointure spatiale avec la table des parcelles du cadastre';
 
 ALTER TABLE m_fiscalite.geo_fisc_coefloc ALTER COLUMN idcoefloc SET DEFAULT nextval('m_fiscalite.idcoefloc_seq'::regclass);
 
@@ -522,7 +527,14 @@ CREATE INDEX an_fisc_vl23_cat2_idx
 -- DROP INDEX m_fiscalite.geo_fisc_secteur_geom_idx;
 
 CREATE INDEX geo_fisc_secteur_geom_idx
-    ON m_fiscalite.geo_fisc_secteur USING gis (geom);
+    ON m_fiscalite.geo_fisc_secteur USING gist (geom);
+    
+-- Index: geo_fisc_secteur_geom1_idx
+
+-- DROP INDEX m_fiscalite.geo_fisc_secteur_geom1_idx;
+
+CREATE INDEX geo_fisc_secteur_geom1_idx
+    ON m_fiscalite.geo_fisc_secteur USING gist (geom1);    
 
 -- Index: geo_fisc_secteur_idsecteur_idx
 
@@ -547,14 +559,6 @@ CREATE INDEX geo_fisc_secteur_insee_idx
 
 CREATE INDEX geo_fisc_localact_geom_idx
     ON m_fiscalite.geo_fisc_localact USING gist (geom);
-    
-
--- Index: geo_fisc_localact_geom1_idx
-
--- DROP INDEX m_fiscalite.geo_fisc_localact_geom1_idx;
-
-CREATE INDEX geo_fisc_localact_geom1_idx
-    ON m_fiscalite.geo_fisc_localact USING gist (geom1);    
     
 
 -- Index: geo_fisc_localact_idlocact_idx
@@ -660,7 +664,8 @@ CREATE VIEW m_fiscalite.geo_v_fisc_secteur_vl AS
   zf.vl22e as vl22cf,
   round(((y.vl22e-v.vl21e)/v.vl21e * 100),2) AS evl22cf21e,      
   s.observ,
-  s.geom
+  s.geom,
+  s.geom1
   
 FROM m_fiscalite.geo_fisc_secteur s
 LEFT JOIN m_fiscalite.an_fisc_vl21 v ON v.s21e = s.s21e
@@ -702,7 +707,9 @@ COMMENT ON COLUMN m_fiscalite.geo_v_fisc_secteur_vl.s22cf IS 'Niveau de secteur 
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_secteur_vl.vl22cf IS 'Valeur locative 2022 (Collectivité - final)';
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_secteur_vl.evl22cf21e IS 'Evolution de la valeur locative 2021-2022 (Collectivité - final)';
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_secteur_vl.observ IS 'Observations';
-COMMENT ON COLUMN m_fiscalite.geo_v_fisc_secteur_vl.geom IS 'Géomètrie du secteur de fiscalité des locaux d''activité';
+COMMENT ON COLUMN m_fiscalite.geo_v_fisc_secteur_vl.geom IS 'Géométrie du secteur de fiscalité des locaux d''activité';
+COMMENT ON COLUMN m_fiscalite.geo_v_fisc_secteur_vl.geom1 IS 'Géométrie réduite pour jointure spatiale avec d''autres classes geo';
+
 
 
 -- #################################################################### VUE REF LOYER VL ###############################################
@@ -744,7 +751,7 @@ CREATE VIEW m_fiscalite.geo_v_fisc_refloyer_vl AS
   l.geom
   
 FROM m_fiscalite.geo_fisc_refloyer l
-LEFT JOIN m_fiscalite.geo_v_fisc_secteur_vl s ON s.cat2 = l.cat2 AND st_intersects(l.geom, s.geom) IS TRUE
+LEFT JOIN m_fiscalite.geo_v_fisc_secteur_vl s ON s.cat2 = l.cat2 AND st_intersects(l.geom, s.geom) IS TRUE AND l.insee = s.insee
 LEFT JOIN m_fiscalite.geo_fisc_coefloc p ON st_intersects(l.geom, p.geom) IS TRUE;
 
 
@@ -778,7 +785,7 @@ COMMENT ON COLUMN m_fiscalite.geo_v_fisc_refloyer_vl.evl22cf21e IS 'Evolution de
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_refloyer_vl.evl22cfp21e IS 'Evolution de la valeur locative pondérée 2021-2022 (Collectivité - final)';
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_refloyer_vl.observ IS 'Observations';
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_refloyer_vl.source IS 'Source de l''information';
-COMMENT ON COLUMN m_fiscalite.geo_v_fisc_refloyer_vl.geom IS 'Géomètrie ponctuelle de l''adresse du local d''activité';
+COMMENT ON COLUMN m_fiscalite.geo_v_fisc_refloyer_vl.geom IS 'Géométrie ponctuelle de l''adresse du local d''activité';
 
 
 
@@ -826,7 +833,7 @@ CREATE VIEW m_fiscalite.geo_v_fisc_localact_vl AS
   l.geom
   
 FROM m_fiscalite.geo_fisc_localact l
-LEFT JOIN m_fiscalite.geo_v_fisc_secteur_vl s ON s.cat2 = l.cat2 AND st_intersects(l.geom1, s.geom) IS TRUE AND l.insee = s.insee
+LEFT JOIN m_fiscalite.geo_v_fisc_secteur_vl s ON s.cat2 = l.cat2 AND st_intersects(l.geom, s.geom1) IS TRUE AND l.insee = s.insee
 LEFT JOIN m_fiscalite.geo_fisc_coefloc p ON st_intersects(l.geom, p.geom1) IS TRUE ;
 
 
@@ -865,7 +872,7 @@ COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.evl22cf21e IS 'Evolution de
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.evl22cfp21e IS 'Evolution de la valeur locative pondérée 2021-2022 (Collectivité - final)';
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.observ IS 'Observations';
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.source IS 'Source de l''information';
-COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.geom IS 'Géomètrie surfacique de la parcelle du local d''activité';
+COMMENT ON COLUMN m_fiscalite.geo_v_fisc_localact_vl.geom IS 'Géométrie surfacique de la parcelle du local d''activité';
 
 
 -- #################################################################### VUE PARCELLE COEF LOC ###############################################
@@ -900,7 +907,7 @@ COMMENT ON COLUMN m_fiscalite.geo_v_fisc_parcelle_coefloc.section IS 'Section';
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_parcelle_coefloc.parcelle IS 'Parcelle';
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_parcelle_coefloc.valcoef IS 'Valeur du coefficient de localisation (Collectivité)';
 COMMENT ON COLUMN m_fiscalite.geo_v_fisc_parcelle_coefloc.observ IS 'Observations';
-COMMENT ON COLUMN m_fiscalite.geo_v_fisc_parcelle_coefloc.geom IS 'Géomètrie surfacique de la parcelle affectée par un coefficient de localisation';
+COMMENT ON COLUMN m_fiscalite.geo_v_fisc_parcelle_coefloc.geom IS 'Géométrie surfacique de la parcelle affectée par un coefficient de localisation';
 
 
 -- ####################################################################################################################################################
@@ -912,11 +919,11 @@ COMMENT ON COLUMN m_fiscalite.geo_v_fisc_parcelle_coefloc.geom IS 'Géomètrie s
 
 -- #################################################################### FONCTION TRIGGER - GEO_FISC_LOCALACT #############################################
 
--- Function: m_fiscalite.ft_geo_fisc_localact()
+-- Function: m_fiscalite.ft_geo_fisc_secteur()
 
--- DROP FUNCTION m_fiscalite.ft_geo_fisc_localact();
+-- DROP FUNCTION m_fiscalite.ft_geo_fisc_secteur();
 
-CREATE OR REPLACE FUNCTION m_fiscalite.ft_geo_fisc_localact()
+CREATE OR REPLACE FUNCTION m_fiscalite.ft_geo_fisc_secteur()
   RETURNS trigger AS
 $BODY$
 
@@ -925,14 +932,14 @@ BEGIN
 -- INSERT
 IF (TG_OP = 'INSERT') THEN
 
-NEW.geom1 = st_multi(st_buffer (NEW.geom,-1));
+NEW.geom1 = st_buffer (NEW.geom,-1);
 
 RETURN NEW;
 
 -- UPDATE
 ELSIF (TG_OP = 'UPDATE') THEN
 
-NEW.geom1 = st_multi(st_buffer (NEW.geom,-1));
+NEW.geom1 = st_buffer (NEW.geom,-1);
  
 RETURN NEW;
 
@@ -943,18 +950,18 @@ $BODY$
   LANGUAGE plpgsql VOLATILE
   COST 100;
 
-COMMENT ON FUNCTION m_fiscalite.ft_geo_fisc_localact() IS 'Fonction trigger pour insert ou update du buffer négatif des polygones des locaux d''activités';
+COMMENT ON FUNCTION m_fiscalite.ft_geo_fisc_secteur() IS 'Fonction trigger pour insert ou update du buffer négatif des polygones de secteurs de VLLP';
 
 
--- Trigger: t_geo_fisc_localact ON m_fiscalite.geo_fisc_localact
+-- Trigger: t_geo_fisc_secteur ON m_fiscalite.geo_fisc_secteur
 
--- DROP TRIGGER t_geo_fisc_localact ON m_fiscalite.geo_fisc_localact;
+-- DROP TRIGGER t_geo_fisc_secteur ON m_fiscalite.geo_fisc_secteur;
 
-CREATE TRIGGER t_geo_fisc_localact
+CREATE TRIGGER t_geo_fisc_secteur
   BEFORE INSERT OR UPDATE
-  ON m_fiscalite.geo_fisc_localact
+  ON m_fiscalite.geo_fisc_secteur
   FOR EACH ROW
-  EXECUTE PROCEDURE m_fiscalite.ft_geo_fisc_localact();
+  EXECUTE PROCEDURE m_fiscalite.ft_geo_fisc_secteur();
 
 
 -- #################################################################### FONCTION TRIGGER - GEO_FISC_COEFLOC #############################################
