@@ -21,7 +21,7 @@ Dans le cadre de la révision des valeurs locatives (VL) des locaux professionne
 - le bareme tarifaire (en fonction de la catégorie du LP et du niveau de secteur)
 - le coefficient de localisation
 
-NB : la valeur locative révisée nette est obtenue par diverses mesures temporaires (délai?) de lissage de l'Etat (neutralisation, planchonnement ...) et sans aucune maitrise de la collectivité
+NB : la valeur locative révisée nette est obtenue par diverses mesures de lissage transitoires et temporaires définies par l'Etat (neutralisation, planchonnement ...)
 
 La collectivité peut agir directement sur 2 leviers :
 - la sectorisation : le choix du niveau de secteur (de 1 à 4) pouvant s'appliquer à la totalité de la commune ou à la section cadastrale communale dans certains cas (ex : Compiègne et Margny)
