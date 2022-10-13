@@ -24,4 +24,4 @@ La collectivité peut agir directement sur 2 leviers :
 - la sectorisation : le choix du niveau de secteur (4) pouvant s'appliquer à la totalité de la commune ou à la section cadastrale communale dans certains cas (ex : Compiègne et Margny)
 - le coefficient de localisation : mesures locales de minoration ou majoration prisent à l'échelle parcellaire pour des considérations territoriales (ex : proximtié axe de circulation majeur, centralité ...)
 
-Par ailleurs, la collectivité pouvait de façon indirecte, recommandée d'autre VL par catégorie. Cette approche a été engagée en s'appuyant sur un recueil d'information sur les loyers pratiqués auprès des propriétaires/locataires de LP.
+Par ailleurs, la collectivité pouvait de façon indirecte, recommandée d'autre VL par catégorie. Cette approche a été étayée à l'appui d'un recueil de loyers pratiqués (propriétaires/locataires/marchant immo de LP).
