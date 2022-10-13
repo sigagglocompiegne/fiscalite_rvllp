@@ -18,7 +18,7 @@ Dans le cadre de la révision des valeurs locatives (VL) des locaux professionne
 
 3 paramètres rentrent en jeu dans le calcul de la valeur locative révisée brute :
 - la surface pondérée du LP
-- le bareme tarifaire selon la catégorie du LP et selon le niveau de secteur
+- le bareme tarifaire (en fonction de la catégorie du LP et du niveau de secteur)
 - le coefficient de localisation
 
 NB : la valeur locative révisée nette est obtenue par diverses mesures temporaires (délai?) de lissage de l'Etat (neutralisation, planchonnement ...) et sans aucune maitrise de la collectivité
