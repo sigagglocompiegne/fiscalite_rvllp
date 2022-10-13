@@ -3,8 +3,16 @@
 # Documentation d'administration de la base #
 
 ## Principes
-  * **généralité** :
-ToDo
+  * **généralité** : 
+Dans le cadre de la révision des valeurs locatives (VL) des locaux professionnels (LP) qui déterminent les bases fiscales de la taxe foncière, la collectivité avait pour besoin, de faire état de la situation avant la réforme des VL, de la proposition de l'Etat et de simuler les possibilités offertes à la collectivité pour la guider dans ces choix.
+
+Hors mesures de lissage de l'Etat, 4 paramètres rentrent en jeu dans le calcul de la valeur locative révisée brute :
+- la surface pondérée du LP
+- le bareme tarifaire de la catégorie du LP
+- le niveau de secteur
+- le coefficient de localisation
+ 
+ 
  
  * **résumé fonctionnel** :
 ToDo
